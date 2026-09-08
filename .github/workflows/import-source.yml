@@ -1,22 +1,18 @@
-name: Import Branchglass source
+name: Verify browser publication
 
 on:
   push:
     branches: [main]
-    paths: ['.import/**']
+    paths: ['.github/workflows/import-source.yml']
   workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: branchglass-source-import
-  cancel-in-progress: false
-
 jobs:
-  import:
+  browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,49 +20,39 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Restore and verify the delivered source package
-        run: |
-          node --input-type=module <<'NODE'
-          import {readdir, readFile, mkdir, writeFile, rm} from 'node:fs/promises';
-          import {dirname, isAbsolute} from 'node:path';
-          import {createHash} from 'node:crypto';
-          import {brotliDecompressSync} from 'node:zlib';
-          const parts = (await readdir('.import')).filter(p => /^\d{3}\.br$/.test(p)).sort();
-          if (parts.length !== 9) throw new Error('Missing source package parts');
-          const bytes = Buffer.concat(await Promise.all(parts.map(p => readFile('.import/' + p))));
-          const digest = createHash('sha256').update(bytes).digest('hex');
-          if (digest !== 'ca1ded28b890027504876007d6c66366763165cb25e4498035096d384ce9de15') throw new Error('Source package checksum mismatch');
-          const files = JSON.parse(brotliDecompressSync(bytes).toString('utf8'));
-          if (Object.keys(files).length !== 38) throw new Error('Unexpected source file count');
-          for (const [name, text] of Object.entries(files)) {
-            if (isAbsolute(name) || name.split('/').includes('..') || name.startsWith('.git/') || name.startsWith('.github/') || typeof text !== 'string') throw new Error('Invalid package path');
-            await mkdir(dirname(name), {recursive: true});
-            await writeFile(name, text);
-          }
-          await rm('.import', {recursive: true});
-          console.log('Verified and restored', Object.keys(files).length, 'source files');
-          NODE
-      - name: Test and generate standalone preview
-        run: |
-          npm test
-          npm run build:preview
-      - name: Commit the application source
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'feat: import Branchglass Git client, WebGPU renderer, native bridge, tests and documentation'
-          git push origin HEAD:main
-      - name: Install pinned browser test tooling
+      - name: Install Chromium verification tools
         run: |
           python -m pip install playwright==1.57.0
           python -m playwright install --with-deps chromium
-      - name: Verify ordinary browser navigation and generate screenshots
-        run: python tests/ui_smoke.py
-      - name: Commit browser verification and screenshots
+      - name: Exercise the browser and record sanitized results
+        id: verify
         run: |
-          git add docs/screenshots docs/results
-          if ! git diff --cached --quiet; then
-            git commit -m 'test: verify native Git workflows in Chromium and capture workspace screenshots'
-            git push origin HEAD:main
+          python - <<'PY'
+          import json, re, subprocess
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              chromium = p.chromium.executable_path
+          result = subprocess.run(['python', 'tests/ui_smoke.py', '--chromium', chromium], capture_output=True, text=True, timeout=480)
+          output = re.sub(r'\b[a-f0-9]{64}\b', '[redacted-token-or-digest]', result.stdout + result.stderr)
+          output = re.sub(r'(https?://127\.0\.0\.1:\d+/?)#[^\s\"\']+', r'\1#[redacted]', output)
+          Path('docs/results').mkdir(parents=True, exist_ok=True)
+          Path('docs/results/publication-browser.json').write_text(json.dumps({'exit_code': result.returncode, 'output': output[-20000:]}, indent=2) + '\n')
+          print(output)
+          raise SystemExit(result.returncode)
+          PY
+      - name: Preserve the verification report and screenshots
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if test -f docs/results/publication-browser.json; then
+            git add -f docs/results/publication-browser.json
+            test ! -f docs/results/ui.json || git add -f docs/results/ui.json
+            test ! -d docs/screenshots || git add docs/screenshots
+            if ! git diff --cached --quiet; then
+              git commit -m 'test: record independent Chromium publication verification'
+              git pull --rebase origin main
+              git push origin HEAD:main
+            fi
           fi
