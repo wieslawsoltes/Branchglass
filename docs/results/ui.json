@@ -75,16 +75,16 @@
     "view": "history",
     "commits": 5000,
     "graph": "Canvas 2D",
-    "cpuGraphMs": 0.2999999998137355,
+    "cpuGraphMs": 0.3999999999650754,
     "graphVertices": 486,
     "historyDOM": 14,
     "diffRows": 6,
     "diffDOM": 6,
-    "worker": false,
+    "worker": true,
     "dirty": false
   },
-  "browser": "144.0.7559.96",
-  "harness": "Inline DOM; test-provided SHA-256/storage and native HTTP forwarding",
+  "browser": "143.0.7499.4",
+  "harness": "Normal loopback navigation and native HTTP",
   "real_native_git": true,
   "hardware_gpu_claim": false
 }
