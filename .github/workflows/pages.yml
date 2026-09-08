@@ -3,13 +3,15 @@ name: Publish Branchglass
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -17,29 +19,60 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - name: Run engine, native Git and static hosting tests
-        run: npm test
+        run: |
+          mkdir -p docs/results
+          rm -f docs/results/ui.json docs/results/ui-failure.json docs/results/pages-local.json
+          npm test | tee docs/results/node-tests.txt
       - name: Bundle the pinned browser Git dependency
         run: npm run vendor
       - name: Build the static website
         run: npm run build:pages
+      - name: Install browser verification tools
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Verify native Git workflows with the real security policy
+        run: python tests/ui_smoke.py
+      - name: Verify the static app under the project subpath
+        run: python tests/pages_smoke.py
+      - name: Upload test reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branchglass-build-verification
+          path: |
+            docs/results
+            docs/screenshots
+          retention-days: 30
       - name: Configure Pages
+        if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
       - name: Upload the static website
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site
+
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       pages: write
       id-token: write
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -47,3 +80,32 @@ jobs:
       - name: Publish
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify-live:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install browser verification tools
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Check the live GitHub Pages app
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: python tests/pages_smoke.py --url "$PAGE_URL"
+      - name: Upload live-site verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: branchglass-live-verification
+          path: |
+            docs/results/pages-live.json
+            docs/screenshots/pages-live-*.png
+          retention-days: 30
