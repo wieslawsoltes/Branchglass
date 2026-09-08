@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {GitHubClient} from '../web/core/github.js';
+
+test('GitHub REST adapter sends explicit, versioned requests and expected-head merge checks',async()=>{
+ const original=globalThis.fetch,calls=[];globalThis.fetch=async(url,options)=>{calls.push({url,options});return new Response(JSON.stringify(url.includes('/actions/runs?')?{workflow_runs:[]}:url.includes('/issues?')?[{number:1},{number:2,pull_request:{}}]:[]),{status:200,headers:{'Content-Type':'application/json'}});};
+ try{const api=new GitHubClient('https://github.com/owner/repo.git','memory-only-token');assert.equal(api.repository,'owner/repo');await api.listPulls(2);assert.match(calls.at(-1).url,/page=2$/);await api.review(42,'Looks good','APPROVE','a'.repeat(40));assert.deepEqual(JSON.parse(calls.at(-1).options.body),{body:'Looks good',event:'APPROVE',commit_id:'a'.repeat(40)});await api.merge(42,'b'.repeat(40),'squash');assert.equal(calls.at(-1).options.method,'PUT');assert.equal(JSON.parse(calls.at(-1).options.body).sha,'b'.repeat(40));await api.createPull({title:'Title',head:'feature',base:'main',draft:true});await api.createIssue({title:'Issue',body:'Details'});assert.equal((await api.issues()).length,1);await api.runs();await api.rerun(77);assert.match(calls.at(-1).url,/77\/rerun$/);await api.cancel(77);assert.equal(calls.at(-1).options.headers.Authorization,'Bearer memory-only-token');assert.equal(calls.at(-1).options.headers['X-GitHub-Api-Version'],'2026-03-10');assert.ok(!calls.some(c=>c.url.includes('memory-only-token')));}
+ finally{globalThis.fetch=original;}
+});
+test('GitHub errors are not reported as success',async()=>{const original=globalThis.fetch;globalThis.fetch=async()=>new Response(JSON.stringify({message:'Resource not accessible'}),{status:403,headers:{'Content-Type':'application/json'}});try{await assert.rejects(new GitHubClient('a/b').listPulls(),/GitHub 403.*Resource not accessible/);assert.throws(()=>new GitHubClient('not-a-repository'),/owner\/repository/);}finally{globalThis.fetch=original;}});

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#11141b">
+  <meta name="description" content="Branchglass — a local-first Git workspace with WebGPU history, precise diffs, and real repository operations.">
+  <title>Branchglass — Your code, in perspective</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" aria-label="Branchglass Git workspace">
+    <header class="titlebar">
+      <button class="brand" data-action="about" aria-label="About Branchglass"><span class="brand-mark"><svg viewBox="0 0 32 32" fill="none"><path d="M9 23V8m0 10c0-7 14-3 14-11" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="9" cy="7" r="3" fill="currentColor"/><circle cx="23" cy="6" r="3" fill="currentColor"/><circle cx="9" cy="25" r="3" fill="currentColor"/></svg></span><span>branchglass<span class="version">PREVIEW</span></span></button>
+      <div class="repo-tabs" id="repo-tabs"></div>
+      <button class="icon-button new-repo" data-action="open" title="Open repository (Ctrl/⌘ O)" aria-label="Open repository"><span data-icon="plus"></span></button>
+      <button class="global-search" data-action="palette"><span data-icon="search"></span><span>Find a file, branch, or command…</span><kbd>⌘ K</kbd></button>
+      <div class="title-actions"><button class="icon-button" data-action="shortcuts" title="Keyboard shortcuts" aria-label="Keyboard shortcuts"><span data-icon="keyboard"></span></button><button class="icon-button" data-action="theme" title="Toggle theme" aria-label="Toggle light or dark theme"><span data-icon="sun"></span></button><button class="avatar small" data-action="settings" title="Repository identity" aria-label="Repository identity">AM</button></div>
+    </header>
+    <div class="toolbar">
+      <div class="repo-heading"><span class="repo-square" data-icon="repo"></span><div><button id="repo-name" class="text-button" data-action="open">horizon <span data-icon="chevronDown"></span></button><span id="repo-location" class="repo-location">Interactive sandbox</span></div></div>
+      <div class="toolbar-divider"></div>
+      <button class="branch-switch" data-action="switchBranch"><span data-icon="branch"></span><span id="current-branch">feature/webgpu-renderer</span><span data-icon="chevronDown"></span></button>
+      <div class="toolbar-spacer"></div>
+      <div class="sync-actions"><button class="button ghost" data-action="fetch"><span data-icon="fetch"></span>Fetch</button><button class="button ghost" data-action="pull"><span data-icon="down"></span>Pull <span id="behind-badge" class="tiny-badge">0</span></button><div class="button-group"><button class="button primary" data-action="push"><span data-icon="up"></span>Push <span id="ahead-badge" class="tiny-badge">3</span></button><button class="button primary square" data-action="pushMenu" aria-label="Push options"><span data-icon="chevronDown"></span></button></div></div>
+      <div class="toolbar-divider"></div><button class="icon-button" data-action="refresh" aria-label="Refresh repository" title="Refresh (Ctrl/⌘ R)"><span data-icon="refresh"></span></button><button class="icon-button" data-action="toolsMenu" title="Repository actions" aria-label="Repository actions"><span data-icon="more"></span></button>
+    </div>
+    <div id="operation-banner" class="operation-banner" hidden></div>
+    <div class="main-shell">
+      <nav class="activity-rail" aria-label="Primary navigation">
+        <div class="rail-top">
+          <button data-view="history" title="History (Alt 1)" aria-label="History" class="rail-button active"><span data-icon="graph"></span></button>
+          <button data-view="changes" title="Working changes (Alt 2)" aria-label="Working changes" class="rail-button"><span data-icon="changes"></span><i id="rail-changes-dot"></i></button>
+          <button data-view="files" title="Repository files (Alt 3)" aria-label="Repository files" class="rail-button"><span data-icon="files"></span></button>
+          <span class="rail-separator"></span>
+          <button data-view="pullrequests" title="Pull requests" aria-label="Pull requests" class="rail-button"><span data-icon="pullrequest"></span></button>
+          <button data-view="insights" title="Repository insights" aria-label="Repository insights" class="rail-button"><span data-icon="chart"></span></button>
+          <button data-view="activity" title="Operation log" aria-label="Operation log" class="rail-button"><span data-icon="terminal"></span></button>
+        </div>
+        <div class="rail-bottom"><button data-action="connection" title="Repository connections" aria-label="Repository connections" class="rail-button"><span data-icon="plug"></span></button><button data-action="settings" title="Settings" aria-label="Settings" class="rail-button"><span data-icon="settings"></span></button></div>
+      </nav>
+      <aside class="sidebar" id="sidebar" aria-label="Repository navigation"></aside>
+      <div class="vertical-resizer" id="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Resize sidebar"></div>
+      <main id="workbench" class="workbench" aria-label="Repository workspace"></main>
+      <div class="vertical-resizer" id="inspector-resizer" role="separator" aria-orientation="vertical" aria-label="Resize inspector"></div>
+      <aside id="inspector" class="inspector" aria-label="Commit inspector"></aside>
+    </div>
+    <footer class="statusbar"><div><span class="status-dot" id="connection-dot"></span><button id="connection-status" data-action="connection">Interactive sandbox</button><span class="status-divider"></span><span data-icon="branch"></span><span id="status-branch">feature/webgpu-renderer</span><span id="status-changes"></span></div><div><button id="busy-status" data-action="activityView">Ready</button><span class="status-divider"></span><button id="gpu-status" data-action="performance"><span data-icon="gpu"></span>Initializing renderer</button><span class="status-divider"></span><span>Local first. Always.</span></div></footer>
+  </div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <div id="context-menu" class="context-menu" role="menu" hidden></div>
+  <dialog id="dialog" class="dialog"></dialog>
+  <dialog id="palette" class="palette"></dialog>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "branchglass",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A local-first Git workspace in plain JavaScript, with a WebGPU commit graph.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.mjs",
+    "demo": "node server/index.mjs --demo",
+    "test": "node --test tests/*.test.mjs",
+    "vendor": "node scripts/vendor.mjs",
+    "build:preview": "node scripts/build-preview.mjs",
+    "build:pages": "node scripts/build-pages.mjs"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,90 @@
+{
+  "results": [
+    {
+      "test": "Application boot and available graph renderer run without exceptions",
+      "pass": true
+    },
+    {
+      "test": "Light and dark themes",
+      "pass": true
+    },
+    {
+      "test": "Command palette search, keyboard selection, and dialog",
+      "pass": true
+    },
+    {
+      "test": "Native repository snapshot wired to real Git API",
+      "pass": true
+    },
+    {
+      "test": "Single-line staging changes the real index",
+      "pass": true
+    },
+    {
+      "test": "Whole-file unstaging preserves working changes",
+      "pass": true
+    },
+    {
+      "test": "Hunk staging applies its exact changed-line set",
+      "pass": true
+    },
+    {
+      "test": "Stage-all and commit compose create a real Git commit",
+      "pass": true
+    },
+    {
+      "test": "Editable file view and keyboard save write actual bytes",
+      "pass": true
+    },
+    {
+      "test": "Unsaved editor navigation guard preserves edits on cancel",
+      "pass": true
+    },
+    {
+      "test": "Branch creation and checkout through modal form",
+      "pass": true
+    },
+    {
+      "test": "Repository-local identity settings",
+      "pass": true
+    },
+    {
+      "test": "Thirteen secondary workspaces render without runtime errors",
+      "pass": true
+    },
+    {
+      "test": "Repository search opens the matching file and line",
+      "pass": true
+    },
+    {
+      "test": "Nested connection-dialog transition and cancellation",
+      "pass": true
+    },
+    {
+      "test": "Commit inspection loads first-parent diffs and metadata",
+      "pass": true
+    },
+    {
+      "test": "5,000-commit synthetic scene keeps fewer than 60 history rows mounted",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "synthetic_history": {
+    "provider": "native",
+    "view": "history",
+    "commits": 5000,
+    "graph": "Canvas 2D",
+    "cpuGraphMs": 0.2999999998137355,
+    "graphVertices": 486,
+    "historyDOM": 14,
+    "diffRows": 6,
+    "diffDOM": 6,
+    "worker": false,
+    "dirty": false
+  },
+  "browser": "144.0.7559.96",
+  "harness": "Inline DOM; test-provided SHA-256/storage and native HTTP forwarding",
+  "real_native_git": true,
+  "hardware_gpu_claim": false
+}

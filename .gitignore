@@ -1,0 +1,10 @@
+.branchglass/
+node_modules/
+__pycache__/
+*.log
+.env
+.DS_Store
+web/vendor/*.js
+web/vendor/isomorphic-git.LICENSE.md
+
+_site/
