@@ -14,7 +14,7 @@ from playwright.sync_api import sync_playwright
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--inline',action='store_true')
-parser.add_argument('--chromium',default=shutil.which('chromium') or shutil.which('google-chrome'))
+parser.add_argument('--chromium',default=None,help='Explicit browser executable; otherwise use the Playwright-managed Chromium.')
 parser.add_argument('--screenshots',type=Path,default=ROOT/'docs/screenshots')
 opts=parser.parse_args()
 OUT=opts.screenshots.resolve();OUT.mkdir(parents=True,exist_ok=True)
@@ -58,6 +58,20 @@ html=(ROOT/'Branchglass.html').read_text().replace('<head>','<head><base href="'
 html=html.replace('boot().catch(error=>',"window.__BG_TEST__={state:S,actions,navigate,refresh,NativeProvider};boot().catch(error=>")
 results=[]
 def passed(label):results.append({'test':label,'pass':True});print('PASS',label,flush=True)
+def wait_for_js(expression, timeout=15000):
+ """Poll via DevTools without injecting eval into a CSP-protected page.
+
+ Playwright's wait_for_function evaluates expression strings inside the page.
+ Keep the real CSP unchanged; use protocol evaluation of an explicit function.
+ """
+ deadline=time.monotonic()+timeout/1000
+ while time.monotonic()<deadline:
+  if page.evaluate('() => ('+expression+')'):return
+  page.wait_for_timeout(50)
+ details={'expression':expression,'errors':errors,'url':page.url,'body':page.locator('body').inner_text()[:12000],'results':results}
+ (ROOT/'docs/results/ui-failure.json').write_text(json.dumps(details,indent=2),encoding='utf8')
+ page.screenshot(path=str(OUT/'failure.png'))
+ raise AssertionError('Timed out waiting for UI condition: '+expression+'; page errors: '+str(errors))
 with sync_playwright() as p:
  browser=p.chromium.launch(executable_path=opts.chromium,headless=True,args=['--no-sandbox'] if hasattr(os,'geteuid') and os.geteuid()==0 else [])
  page=browser.new_page(viewport={'width':1720,'height':1080},device_scale_factor=1)
@@ -74,7 +88,7 @@ with sync_playwright() as p:
   source=(ROOT/'web/app.js').read_text().replace('boot().catch(error=>',"window.__BG_TEST__={state:S,actions,navigate,refresh,NativeProvider};boot().catch(error=>")
   page.route('**/app.js',lambda route:route.fulfill(body=source,content_type='text/javascript'))
   page.goto(BASE,wait_until='load')
- page.wait_for_function('!!window.Branchglass && document.querySelectorAll(".diff-row").length>0')
+ wait_for_js('!!window.Branchglass && document.querySelectorAll(".diff-row").length>0')
  assert not errors,errors
  passed('Application boot and available graph renderer run without exceptions')
  page.screenshot(path=str(OUT/'dark.png'))
@@ -84,15 +98,15 @@ with sync_playwright() as p:
  # test-provided crypto/storage and HTTP forwarding. Default uses real navigation.
  page.evaluate('''async ({token,repo,info})=>{const x=window.__BG_TEST__;const provider=new x.NativeProvider(token,repo);x.state.bridge={token,info};x.state.provider=provider;x.state.builtView=null;await x.refresh();}''',{'token':TOKEN,'repo':repo,'info':info})
  assert page.evaluate('Branchglass.diagnostics().provider')=='native';page.screenshot(path=str(OUT/'native.png'));passed('Native repository snapshot wired to real Git API')
- page.locator('.diff-cell.add[data-action=selectLine]').first.click();page.wait_for_selector('#selection-button:not([hidden])');assert '1 line' in page.locator('#selection-button').inner_text();page.locator('#selection-button').click();page.wait_for_function('window.__BG_TEST__.state.busy===0 && document.querySelector("#selection-button")?.hidden');
+ page.locator('.diff-cell.add[data-action=selectLine]').first.click();page.wait_for_selector('#selection-button:not([hidden])');assert '1 line' in page.locator('#selection-button').inner_text();page.locator('#selection-button').click();wait_for_js('window.__BG_TEST__.state.busy===0 && document.querySelector("#selection-button")?.hidden');
  pair=api('pair',{'path':'src/renderer/pipeline.js','mode':'staged'});assert 'enableCulling' in pair['after'];passed('Single-line staging changes the real index')
- page.locator('.file-row[data-path="src/renderer/pipeline.js"][data-mode="staged"]').hover();page.locator('.file-row[data-path="src/renderer/pipeline.js"][data-mode="staged"] .stage-button').click();page.wait_for_function('window.__BG_TEST__.state.busy===0 && !window.__BG_TEST__.state.snapshot.status.files.find(f=>f.path.endsWith("pipeline.js"))?.staged');passed('Whole-file unstaging preserves working changes')
- page.locator('[data-action=stageHunk]').first.click();page.wait_for_function('window.__BG_TEST__.state.busy===0 && window.__BG_TEST__.state.snapshot.status.files.find(f=>f.path.endsWith("pipeline.js"))?.staged');passed('Hunk staging applies its exact changed-line set')
- page.locator('[data-action=stageAll]').first.click();page.wait_for_function('window.__BG_TEST__.state.busy===0 && !window.__BG_TEST__.state.snapshot.status.files.some(f=>f.unstaged)');page.locator('#commit-summary').fill('test: complete browser-staged change');page.locator('#commit-body').fill('Verified through the Branchglass interface.');page.locator('#commit-button').click();page.wait_for_function('window.__BG_TEST__.state.busy===0 && window.__BG_TEST__.state.snapshot.status.files.length===0');assert api('log',{'limit':1})[0]['subject']=='test: complete browser-staged change';passed('Stage-all and commit compose create a real Git commit')
- page.locator('.rail-button[data-view=files]').click();page.wait_for_selector('.file-row[data-path="src/renderer/pipeline.js"]');page.locator('.file-row[data-path="src/renderer/pipeline.js"]').click();page.wait_for_selector('#code-editor');content=page.locator('#code-editor').input_value();page.locator('#code-editor').fill(content+'\n// Edited in Branchglass UI test.\n');assert page.evaluate('Branchglass.diagnostics().dirty');page.locator('#code-editor').press('Control+s');page.wait_for_function('!window.Branchglass.diagnostics().dirty && window.__BG_TEST__.state.busy===0');assert '// Edited in Branchglass UI test.' in api('read',{'path':'src/renderer/pipeline.js'})['content'];passed('Editable file view and keyboard save write actual bytes')
+ page.locator('.file-row[data-path="src/renderer/pipeline.js"][data-mode="staged"]').hover();page.locator('.file-row[data-path="src/renderer/pipeline.js"][data-mode="staged"] .stage-button').click();wait_for_js('window.__BG_TEST__.state.busy===0 && !window.__BG_TEST__.state.snapshot.status.files.find(f=>f.path.endsWith("pipeline.js"))?.staged');passed('Whole-file unstaging preserves working changes')
+ page.locator('[data-action=stageHunk]').first.click();wait_for_js('window.__BG_TEST__.state.busy===0 && window.__BG_TEST__.state.snapshot.status.files.find(f=>f.path.endsWith("pipeline.js"))?.staged');passed('Hunk staging applies its exact changed-line set')
+ page.locator('[data-action=stageAll]').first.click();wait_for_js('window.__BG_TEST__.state.busy===0 && !window.__BG_TEST__.state.snapshot.status.files.some(f=>f.unstaged)');page.locator('#commit-summary').fill('test: complete browser-staged change');page.locator('#commit-body').fill('Verified through the Branchglass interface.');page.locator('#commit-button').click();wait_for_js('window.__BG_TEST__.state.busy===0 && window.__BG_TEST__.state.snapshot.status.files.length===0');assert api('log',{'limit':1})[0]['subject']=='test: complete browser-staged change';passed('Stage-all and commit compose create a real Git commit')
+ page.locator('.rail-button[data-view=files]').click();page.wait_for_selector('.file-row[data-path="src/renderer/pipeline.js"]');page.locator('.file-row[data-path="src/renderer/pipeline.js"]').click();page.wait_for_selector('#code-editor');content=page.locator('#code-editor').input_value();page.locator('#code-editor').fill(content+'\n// Edited in Branchglass UI test.\n');assert page.evaluate('Branchglass.diagnostics().dirty');page.locator('#code-editor').press('Control+s');wait_for_js('!window.Branchglass.diagnostics().dirty && window.__BG_TEST__.state.busy===0');assert '// Edited in Branchglass UI test.' in api('read',{'path':'src/renderer/pipeline.js'})['content'];passed('Editable file view and keyboard save write actual bytes')
  page.locator('#code-editor').fill(content+'unsaved');page.locator('.rail-button[data-view=history]').click();page.wait_for_selector('#dialog[open]');assert 'Discard unsaved' in page.locator('#dialog').inner_text();page.locator('#dialog [data-action=closeDialog]').first.click();assert page.locator('#code-editor').count()==1;page.locator('#code-editor').fill(content+'\n// Edited in Branchglass UI test.\n');page.locator('.rail-button[data-view=history]').click();page.wait_for_selector('#history-scroll');passed('Unsaved editor navigation guard preserves edits on cancel')
- page.locator('[data-action=createBranch]').first.click();page.wait_for_selector('#modal-form');page.locator('#modal-form [name=name]').fill('test/browser-interface');page.locator('#modal-form button[type=submit]').click();page.wait_for_function('document.querySelector("#current-branch").textContent==="test/browser-interface"');passed('Branch creation and checkout through modal form')
- page.locator('.rail-button[data-action=settings]').click();page.wait_for_selector('#modal-form');page.locator('[name="user.name"]').fill('Branchglass UI Tester');page.locator('#modal-form button[type=submit]').click();page.wait_for_function('!document.querySelector("#dialog").open');assert api('config')['user.name']=='Branchglass UI Tester';passed('Repository-local identity settings')
+ page.locator('[data-action=createBranch]').first.click();page.wait_for_selector('#modal-form');page.locator('#modal-form [name=name]').fill('test/browser-interface');page.locator('#modal-form button[type=submit]').click();wait_for_js('document.querySelector("#current-branch").textContent==="test/browser-interface"');passed('Branch creation and checkout through modal form')
+ page.locator('.rail-button[data-action=settings]').click();page.wait_for_selector('#modal-form');page.locator('[name="user.name"]').fill('Branchglass UI Tester');page.locator('#modal-form button[type=submit]').click();wait_for_js('!document.querySelector("#dialog").open');assert api('config')['user.name']=='Branchglass UI Tester';passed('Repository-local identity settings')
  for view in ['branches','tags','stashes','worktrees','remotes','reflog','submodules','lfs','bisect','insights','activity','search','pullrequests']:
   page.evaluate('async view=>await window.__BG_TEST__.navigate(view)',view)
   assert page.locator('#workbench h1').count()==1,(view,page.locator('#workbench').inner_text())
@@ -102,7 +116,7 @@ with sync_playwright() as p:
  page.evaluate('async()=>await window.__BG_TEST__.navigate("search")');page.locator('#repo-search-input').fill('Edited in Branchglass');page.locator('#repo-search-form button').click();page.wait_for_selector('#repo-search-results [data-action=searchOpen]');page.locator('#repo-search-results [data-action=searchOpen]').first.click();page.wait_for_selector('#code-editor');assert page.locator('#code-editor').input_value().find('Edited in Branchglass')>=0;passed('Repository search opens the matching file and line')
  # Repeatedly replacing dialogs must not accidentally resolve a newly opened form.
  page.locator('[data-action=open]').first.click();page.wait_for_selector('#dialog[open]');page.locator('[data-action=nativeOpen]').click();page.wait_for_selector('#modal-form [name=path]');page.locator('#modal-form [data-action=closeDialog]').first.click();passed('Nested connection-dialog transition and cancellation')
- page.evaluate('async()=>await window.__BG_TEST__.navigate("history")');page.locator('[data-action=selectCommit]').first.click();page.wait_for_function('!!window.__BG_TEST__.state.commitOid && window.__BG_TEST__.state.commitFiles.length>0');assert 'COMMIT' in page.locator('#inspector').inner_text();passed('Commit inspection loads first-parent diffs and metadata')
+ page.evaluate('async()=>await window.__BG_TEST__.navigate("history")');page.locator('[data-action=selectCommit]').first.click();wait_for_js('!!window.__BG_TEST__.state.commitOid && window.__BG_TEST__.state.commitFiles.length>0');assert 'COMMIT' in page.locator('#inspector').inner_text();passed('Commit inspection loads first-parent diffs and metadata')
  # Synthetic-history rendering test: graph virtualization, not a throughput claim.
  stats=page.evaluate('''async()=>{const x=window.__BG_TEST__,base=x.state.snapshot.commits[0];x.state.snapshot.commits=Array.from({length:5000},(_,i)=>({...base,oid:String(i).padStart(40,'0'),parents:i<4999?[String(i+1).padStart(40,'0')]:[],refs:[],subject:'Synthetic commit '+i}));x.state.commitOid=null;x.state.inspectedCommit=null;x.state.builtView=null;await x.navigate('history');document.querySelector('#history-scroll').scrollTop=150000;await new Promise(r=>setTimeout(r,100));return Branchglass.diagnostics();}''');assert stats['historyDOM']<60 and stats['commits']==5000,stats;passed('5,000-commit synthetic scene keeps fewer than 60 history rows mounted')
  assert not errors,errors
